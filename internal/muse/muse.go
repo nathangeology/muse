@@ -3,6 +3,7 @@ package muse
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
@@ -154,25 +155,33 @@ func (m *Muse) Upload(ctx context.Context) (*UploadResult, error) {
 	}
 
 	log.Println("Scanning local sessions...")
+	type result struct {
+		name     string
+		sessions []source.Session
+		err      error
+	}
+	providers := source.Providers()
+	results := make([]result, len(providers))
+	var wg sync.WaitGroup
+	for i, provider := range providers {
+		wg.Add(1)
+		go func(i int, p source.Provider) {
+			defer wg.Done()
+			sessions, err := p.Sessions()
+			results[i] = result{name: p.Name(), sessions: sessions, err: err}
+		}(i, provider)
+	}
+	wg.Wait()
+
 	var local []source.Session
 	var warnings []string
-	if sessions, err := source.OpenCodeSessions(); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to read OpenCode sessions: %v", err))
-	} else {
-		log.Printf("Found %d OpenCode sessions\n", len(sessions))
-		local = append(local, sessions...)
-	}
-	if sessions, err := source.ClaudeCodeSessions(); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to read Claude Code sessions: %v", err))
-	} else {
-		log.Printf("Found %d Claude Code sessions\n", len(sessions))
-		local = append(local, sessions...)
-	}
-	if sessions, err := source.KiroSessions(); err != nil {
-		warnings = append(warnings, fmt.Sprintf("failed to read Kiro sessions: %v", err))
-	} else {
-		log.Printf("Found %d Kiro sessions\n", len(sessions))
-		local = append(local, sessions...)
+	for _, r := range results {
+		if r.err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to read %s sessions: %v", r.name, r.err))
+			continue
+		}
+		log.Printf("Found %d %s sessions\n", len(r.sessions), r.name)
+		local = append(local, r.sessions...)
 	}
 
 	log.Printf("Diffing %d local sessions against remote...\n", len(local))
