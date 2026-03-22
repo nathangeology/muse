@@ -9,28 +9,28 @@ import (
 	"time"
 
 	"github.com/ellistarn/muse/internal/conversation"
-	"github.com/ellistarn/muse/internal/distill"
+	"github.com/ellistarn/muse/internal/compose"
 	"github.com/ellistarn/muse/internal/storage"
 	"github.com/ellistarn/muse/internal/testutil"
 )
 
-func TestDistillCmd_NoStore(t *testing.T) {
+func TestComposeCmd_NoStore(t *testing.T) {
 	// When no bucket is set, local store is used — this test just validates
 	// the command doesn't panic. It will fail at bedrock client creation
 	// which is expected.
 	t.Setenv("MUSE_BUCKET", "")
 }
 
-func TestDistillCmd_LearnNoStore(t *testing.T) {
+func TestComposeCmd_LearnNoStore(t *testing.T) {
 	t.Setenv("MUSE_BUCKET", "")
 }
 
-func TestRunDistill_PropagatesRunError(t *testing.T) {
+func TestRunCompose_PropagatesRunError(t *testing.T) {
 	store := &failingStore{err: fmt.Errorf("storage unavailable")}
 	ctx := context.Background()
 	var stdout, stderr bytes.Buffer
 
-	err := runDistill(ctx, &stdout, &stderr, store, &testutil.MockLLM{}, &testutil.MockLLM{}, distill.Options{BaseOptions: distill.BaseOptions{Limit: 100}})
+	err := runCompose(ctx, &stdout, &stderr, store, &testutil.MockLLM{}, &testutil.MockLLM{}, compose.Options{BaseOptions: compose.BaseOptions{Limit: 100}})
 	if err == nil {
 		t.Fatal("expected error from failing store, got nil")
 	}
@@ -39,13 +39,13 @@ func TestRunDistill_PropagatesRunError(t *testing.T) {
 	}
 }
 
-func TestRunDistill_PropagatesLearnError(t *testing.T) {
+func TestRunCompose_PropagatesLearnError(t *testing.T) {
 	store := testutil.NewConversationStore()
 	store.Observations["conversations/test/conv-1.json"] = "- observation"
 	ctx := context.Background()
 	var stdout, stderr bytes.Buffer
 
-	err := runDistill(ctx, &stdout, &stderr, store, nil, &testutil.MockLLM{Err: fmt.Errorf("learn failed")}, distill.Options{Learn: true})
+	err := runCompose(ctx, &stdout, &stderr, store, nil, &testutil.MockLLM{Err: fmt.Errorf("learn failed")}, compose.Options{Learn: true})
 	if err == nil {
 		t.Fatal("expected error from failing LLM, got nil")
 	}
@@ -54,7 +54,7 @@ func TestRunDistill_PropagatesLearnError(t *testing.T) {
 	}
 }
 
-func TestRunDistill_SuccessfulRun(t *testing.T) {
+func TestRunCompose_SuccessfulRun(t *testing.T) {
 	store := testutil.NewConversationStore()
 	store.AddConversation("test", "conv-1", time.Now(), []conversation.Message{
 		{Role: "user", Content: "use tabs"},
@@ -70,19 +70,19 @@ func TestRunDistill_SuccessfulRun(t *testing.T) {
 	ctx := context.Background()
 	var stdout, stderr bytes.Buffer
 
-	err := runDistill(ctx, &stdout, &stderr, store, mockLLM, mockLLM, distill.Options{BaseOptions: distill.BaseOptions{Limit: 100}})
+	err := runCompose(ctx, &stdout, &stderr, store, mockLLM, mockLLM, compose.Options{BaseOptions: compose.BaseOptions{Limit: 100}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "Processed 1 conversations") {
 		t.Errorf("expected 'Processed 1 conversations', got: %s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Muse distilled") {
-		t.Errorf("expected 'Muse distilled', got: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "Muse composed") {
+		t.Errorf("expected 'Muse composed', got: %s", stdout.String())
 	}
 }
 
-func TestRunDistill_SuccessfulLearn(t *testing.T) {
+func TestRunCompose_SuccessfulLearn(t *testing.T) {
 	store := testutil.NewConversationStore()
 	store.Observations["conversations/test/conv-1.json"] = "- observation"
 	mockLLM := &testutil.MockLLM{
@@ -92,12 +92,12 @@ func TestRunDistill_SuccessfulLearn(t *testing.T) {
 	ctx := context.Background()
 	var stdout, stderr bytes.Buffer
 
-	err := runDistill(ctx, &stdout, &stderr, store, nil, mockLLM, distill.Options{Learn: true})
+	err := runCompose(ctx, &stdout, &stderr, store, nil, mockLLM, compose.Options{Learn: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Muse distilled") {
-		t.Errorf("expected 'Muse distilled', got: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "Muse composed") {
+		t.Errorf("expected 'Muse composed', got: %s", stdout.String())
 	}
 }
 
