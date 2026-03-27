@@ -135,7 +135,7 @@ func Upload(ctx context.Context, store storage.Store, sources ...string) (*Uploa
 		conversations []conversation.Conversation
 		err           error
 	}
-	providers := conversation.Providers()
+	providers := conversation.ProvidersFor(sources)
 	results := make([]result, len(providers))
 	var wg sync.WaitGroup
 	for i, provider := range providers {

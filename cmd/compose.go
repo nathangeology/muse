@@ -38,20 +38,21 @@ Two composition methods are available:
   reduces all observations into a single muse.md. Simpler, sufficient for
   smaller observation sets.
 
-Optionally pass one or more source names (codex, kiro, kiro-cli, claude-code, opencode) to limit
-discovery and observation to those sources.
+Optionally pass one or more source names to limit discovery and observation to
+those sources. Run "muse sources" to see what's available. Network sources like
+github are opt-in — they only run when explicitly named. Pass "all" to include
+every source.
 
 Use --learn to recompose the muse from existing observations without
 reprocessing conversations. Use --reobserve to reprocess conversations from scratch.`,
 		Example: `  muse compose                          # default: clustering
   muse compose --method=map-reduce      # simpler pipeline
   muse compose codex                    # only Codex conversations
-  muse compose kiro                     # only kiro conversations
-  muse compose kiro opencode            # kiro and opencode
+  muse compose github                   # GitHub PRs and issues (opt-in, requires gh auth)
+  muse compose all                      # all sources including opt-in
   muse compose kiro --reobserve         # re-observe kiro from scratch
-  muse compose --learn                  # recompose muse from existing observations
-  muse compose --limit 50              # process at most 50 conversations
-  muse compose --relabel                 # force re-label all observations`,
+  muse compose --learn                  # recompose from existing observations
+  muse compose --limit 50              # process at most 50 conversations`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			sources := args
@@ -89,7 +90,7 @@ reprocessing conversations. Use --reobserve to reprocess conversations from scra
 	cmd.Flags().BoolVar(&reobserve, "reobserve", false, "re-observe all conversations from scratch")
 	cmd.Flags().BoolVar(&relabel, "relabel", false, "force re-label all observations")
 	cmd.Flags().BoolVar(&learn, "learn", false, "skip observe, recompose muse from existing observations (map-reduce only)")
-	cmd.Flags().IntVar(&limit, "limit", 100, "max conversations to process (0 = no limit)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "max conversations to observe per run (0 = no limit)")
 	cmd.Flags().StringVar(&method, "method", "clustering", "composition method: clustering or map-reduce")
 	return cmd
 }
