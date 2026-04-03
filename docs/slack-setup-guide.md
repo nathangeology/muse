@@ -5,111 +5,85 @@ Connect Slack as a conversation source so `muse compose` includes your Slack mes
 ## Quick Start
 
 ```bash
-# 1. Set credentials
-export MUSE_SLACK_TOKEN=xoxp-...          # Slack user token
-export MUSE_SLACK_WORKSPACE=mycompany.enterprise.slack.com  # only needed for SSO
-
-# 2. Activate the source
-muse add slack
-
-# 3. Compose (Slack is now included automatically)
-muse compose
+export MUSE_SLACK_TOKEN=xoxp-...        # your user token
+muse add slack                           # activate and sync
+muse compose                             # includes Slack conversations
 ```
 
-## Authentication
+## Authentication Options
 
-Muse reads `MUSE_SLACK_TOKEN`. The value determines the auth method:
+Muse supports three token types via the `MUSE_SLACK_TOKEN` environment variable.
 
-### Option A: User OAuth Token (simplest)
+### Option 1: User Token (xoxp-)
 
-Use a `xoxp-` token from a Slack app you control.
+The simplest path. Create a Slack app with a user token:
 
-1. Go to [api.slack.com/apps](https://api.slack.com/apps) and create an app (or use an existing one).
-2. Under **OAuth & Permissions**, add the scopes listed below.
-3. Install the app to your workspace.
-4. Copy the **User OAuth Token** (`xoxp-...`).
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and create a new app
+2. Under **OAuth & Permissions**, add these **User Token Scopes**:
+   - `search:read` — find your messages across channels
+   - `channels:history` — read public channel messages
+   - `groups:history` — read private channel messages
+   - `im:history` — read direct messages
+   - `mpim:history` — read group DMs
+   - `users:read` — resolve user display names
+3. Install the app to your workspace
+4. Copy the **User OAuth Token** (starts with `xoxp-`)
 
 ```bash
-export MUSE_SLACK_TOKEN=xoxp-your-token-here
+export MUSE_SLACK_TOKEN=xoxp-...
 ```
 
-No other env vars needed — the token authenticates directly.
+### Option 2: Client Token + Cookie (xoxc-)
 
-### Option B: SAML SSO via Cookie File
-
-For enterprise workspaces that use SAML SSO (e.g. Okta, Azure AD), point
-`MUSE_SLACK_TOKEN` at a Netscape-format cookie file exported from your browser.
-
-1. Log into your Slack workspace in a browser.
-2. Export cookies to a file using a browser extension (e.g. "Get cookies.txt LOCALLY").
-3. Set both env vars:
+Extract from a browser session. The `xoxc-` token requires a `d` cookie:
 
 ```bash
-export MUSE_SLACK_TOKEN=~/path/to/cookies.txt
+export MUSE_SLACK_TOKEN=xoxc-...
+export MUSE_SLACK_COOKIE=xoxd-...       # value of the 'd' cookie
+```
+
+To extract these from your browser:
+1. Open your Slack workspace in a browser
+2. Open DevTools → Application → Cookies → find the `d` cookie
+3. Open DevTools → Console → run `window.prompt("token", BootData.api_token)` to get the xoxc token
+
+### Option 3: SAML SSO via Cookie File
+
+For enterprise workspaces with SAML SSO. Point `MUSE_SLACK_TOKEN` at a Netscape-format cookie file:
+
+```bash
+export MUSE_SLACK_TOKEN=~/cookies.txt
 export MUSE_SLACK_WORKSPACE=mycompany.enterprise.slack.com
 ```
 
-Muse detects the file path (starts with `/` or `~/`), loads the cookies, follows
-the SAML redirect chain, and extracts a `xoxc-` session token automatically.
+Muse follows the SAML redirect chain using cookies from the file, authenticates with your IDP, and extracts a `xoxc-` token automatically.
 
-For multiple workspaces, comma-separate them:
+For multiple workspaces, comma-separate:
 
 ```bash
 export MUSE_SLACK_WORKSPACE=team1.enterprise.slack.com,team2.enterprise.slack.com
 ```
 
-### Option C: Manual xoxc Token + Cookie
+## Required API Scopes
 
-If you have a `xoxc-` token (e.g. extracted from browser dev tools), pair it with
-the `d` cookie:
-
-```bash
-export MUSE_SLACK_TOKEN=xoxc-your-token-here
-export MUSE_SLACK_COOKIE=your-d-cookie-value
-```
-
-`xoxc-` tokens require the `d` cookie on every request — without `MUSE_SLACK_COOKIE`
-API calls will fail with `invalid_auth`.
-
-## Required Slack API Scopes
-
-The provider uses these API methods:
-
-| Method | Scope Required | Purpose |
-|--------|---------------|---------|
-| `auth.test` | (no extra scope) | Verify token, get user/team ID |
-| `search.messages` | `search:read` | Find channels you were active in |
-| `conversations.history` | `channels:history`, `groups:history`, `im:history`, `mpim:history` | Fetch channel messages |
-| `conversations.replies` | `channels:history`, `groups:history`, `im:history`, `mpim:history` | Fetch thread replies |
-| `users.info` | `users:read` | Resolve user IDs to display names |
-
-**Minimum scope set for a `xoxp-` token:**
-- `search:read`
-- `channels:history`
-- `groups:history`
-- `im:history`
-- `mpim:history`
-- `users:read`
-
-SSO-derived tokens (`xoxc-`) inherit the scopes of the authenticated user session,
-which typically includes all of the above.
+| Scope | Used By | Purpose |
+|-------|---------|---------|
+| `search:read` | `search.messages` | Discover channels you were active in |
+| `channels:history` | `conversations.history` | Fetch public channel messages |
+| `groups:history` | `conversations.history` | Fetch private channel messages |
+| `im:history` | `conversations.history` | Fetch direct messages |
+| `mpim:history` | `conversations.history` | Fetch group DM messages |
+| `users:read` | `users.info` | Resolve user IDs to display names |
 
 ## Activating the Source
 
-Slack is an opt-in source. Activate it with:
+Slack is an opt-in source. Activate it:
 
 ```bash
 muse add slack
 ```
 
-This creates the observation directory and runs an initial sync. After activation,
-`muse compose` includes Slack automatically on every run.
-
-Check status:
-
-```bash
-muse sources
-```
+This creates an observation directory and syncs conversations. Future `muse compose` runs include Slack automatically.
 
 To deactivate:
 
@@ -117,83 +91,30 @@ To deactivate:
 muse remove slack
 ```
 
-## How It Works
-
-1. **Discovery** — Searches for all messages you sent (`from:<@your_id>`) to find
-   channels you were active in.
-2. **Fetch** — For each active channel, fetches the message history and thread replies
-   in your activity time range.
-3. **Assembly** — Flattens threads into a chronological timeline per channel, filters
-   noise (bot messages, join/leave events, bare URLs), and chunks into ~20k-character
-   conversations.
-4. **Caching** — Results are cached at `~/.muse/cache/slack/`. Subsequent runs only
-   fetch messages newer than the last sync.
-
 ## Verifying It Works
 
 ```bash
-# Check the source is active and has conversations
-muse sources
-
-# Run compose and watch Slack sync progress
-muse compose
+muse sources                # should show: slack  active  N conversations  N observations
 ```
 
-You should see output like:
+## How It Works
 
-```
-authenticated via SSO (~/cookies.txt → mycompany.enterprise.slack.com)
-mycompany: 12 channels, 847 messages
-```
+1. **Discovery** — searches for all your messages via `search.messages`
+2. **Fetch** — downloads full channel history and thread replies for channels you participated in
+3. **Cache** — stores raw data at `~/.muse/cache/slack/` (incremental sync on subsequent runs)
+4. **Chunk** — splits long channels into ~20k character conversation chunks
+5. **Filter** — excludes bot messages, join/leave events, and URL-only messages
+
+Only channels where you actually posted messages are included.
 
 ## Troubleshooting
 
-### `MUSE_SLACK_TOKEN is not set, skipping Slack source`
-
-The env var is empty or unset. Export it in your shell profile.
-
-### `MUSE_SLACK_WORKSPACE not set`
-
-Required when `MUSE_SLACK_TOKEN` points to a cookie file. Set it to your
-workspace domain (e.g. `mycompany.enterprise.slack.com`).
-
-### `slack API error: invalid_auth`
-
-- **xoxp token**: Token may be revoked or expired. Generate a new one.
-- **xoxc token**: Missing or stale `MUSE_SLACK_COOKIE`. Re-export from browser.
-- **SSO**: Cookie file may be expired. Re-export cookies after logging in.
-
-### `slack API error: missing_scope`
-
-Your token lacks a required scope. See the scopes table above. For `xoxp-` tokens,
-add the missing scope in your Slack app's OAuth settings and reinstall.
-
-### `SAML flow completed but no xoxc token found in response`
-
-The SSO redirect chain completed but Slack didn't return a token. This usually means:
-- The cookie file is stale (re-export after a fresh browser login)
-- The workspace URL is wrong (check `MUSE_SLACK_WORKSPACE`)
-- Your IDP session expired
-
-### `no cookies found in <path>`
-
-The cookie file exists but contains no parseable cookies. Ensure it's in
-Netscape/Mozilla cookie format (tab-separated, one cookie per line).
-
-### Rate limiting (slow sync)
-
-Muse respects Slack's rate limits with adaptive pacing:
-- `search.messages`: ~0.5 req/s (Tier 2)
-- `conversations.history` / `conversations.replies`: ~2 req/s (Tier 3)
-
-First sync of a large workspace may take several minutes. Subsequent syncs are
-incremental and much faster.
-
-### Clearing the cache
-
-To force a full re-sync:
-
-```bash
-rm -rf ~/.muse/cache/slack/
-muse compose
-```
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| `MUSE_SLACK_TOKEN is not set` | Env var missing | Set `MUSE_SLACK_TOKEN` |
+| `slack API error: invalid_auth` | Token expired or invalid | Get a fresh token |
+| `slack API error: missing_scope` | Token lacks required scopes | Add scopes listed above |
+| `MUSE_SLACK_WORKSPACE not set` | Using cookie file without workspace | Set `MUSE_SLACK_WORKSPACE` |
+| `no cookies found in <path>` | Cookie file empty or wrong format | Ensure Netscape cookie format |
+| `SAML flow completed but no xoxc token` | SSO cookies expired | Re-export cookies from browser |
+| `0 conversations` after sync | Token works but no messages found | Verify the token owner has sent messages |
