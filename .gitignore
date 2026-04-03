@@ -1,2 +1,6 @@
 /muse
 eval/
+.beads/
+.kiro/
+.runtime/
+CLAUDE.md
